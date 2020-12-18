@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <link href="resources/jspsych.css" rel="stylesheet" type="text/css"></link>
+        <link href="resources/bootstrap.min.css" rel="stylesheet" type="text/css"></link>
+        <script src="/assets/javascripts/jatos.js"></script>
+        <script src="resources/jspsych.js"></script>
+        <script src="resources/jspsych-html-keyboard-response.js"></script>
+        <script src="resources/jspsych-html-button-response.js"></script>
+        <script src="resources/jspsych-image-keyboard-response.js"></script>
+        <script src="resources/jspsych-survey-html-form.js"></script>
+        <script src="resources/jspsych-fullscreen.js"></script>
+        <script src="resources/jquery.min.js"></script>
+        <script src="resources/bootstrap.min.js"></script>
+        <script src="resources/webgazer.js"></script>
+        <script src="resources/jspsych-webgazer-calibration.js"></script>
+        <script src="resources/jspsych-aspect2-experiment.js"></script>
+        <script src="resources/jspsych-browser-check.js"></script>
+        <script src="resources/jspsych-head-positioning.js"></script>
+        <script src="resources/sweetalert2.min.js"></script>
+        <script src="resources/image-picker.min.js"></script>
+    </head>
+
+    <body></body>
+
+    <script>
+
+    //This script was initially developed by Onur Ferhat (2020), and adapted by Myrte Vos and Alain Schoorl
+
+    var jsPsych = window['jsPsych'];
+    var debug_mode = false;
+    window.is_calibrated = false;
+    
+    // Trials coming from the 2 lists
+    var all_trials = [];
+
+    function parseData(data, list_index) {
+        var parsed_data = [];
+        // Split data into lines
+        var lines = data.split(/\r\n|\n/);
+        // Get data headings
+        var headings = lines[0].split(';');
+
+        for (var i = 1; i < lines.length; i++) {
+            var line_pieces = lines[i].split(';');
+            if (line_pieces.length != headings.length)
+                break;
+            var line_data = {};
+            for (var j = 0; j < headings.length; j++) {
+                var line_col_data = line_pieces[j];
+                // Convert the colum data to integer or boolean (if possible)
+                if (line_col_data != '' && !isNaN(line_col_data))
+                    line_col_data = parseInt(line_col_data);
+                else if (line_col_data == "y")
+                    line_col_data = true;
+                else if (line_col_data == "n")
+                    line_col_data = false;
+                line_data[headings[j]] = line_col_data
+            }
+            parsed_data.push(line_data);
+        }
+
+        var data_trials = [];
+        for (var i = 0; i < parsed_data.length; i++) {
+            var trial = parsed_data[i];
+            data_trials.push({
+                "calibration_lost_dialog_title": "Calibration Lost",
+                "calibration_lost_dialog_text": "We lost your face in the webcam video stream. Please sit in front of the monitor, and make sure your face is centered in the webcam video stream. The experiment will continue with a new calibration.",
+                "ok_button_label": "OK",
+                "type": 'aspect2-experiment',
+                "left": 'stimuli/img/' + (trial.TargetSide == "l" ? trial.TargetPic : trial.CompPic),
+                "right": 'stimuli/img/' + (trial.TargetSide == "r" ? trial.TargetPic : trial.CompPic),
+                "audio": 'stimuli/audio/' + trial.Audio,
+                "preamble": 'stimuli/audio/' + trial.PreambleAudio,
+                "list_number": list_index,
+                "target_filler": trial.Type,
+                "target_side": trial.TargetSide,
+                "imp_side": trial.ImpSide,
+                "target_verb": trial.TargetVerb,
+                "target_aspect": trial.TargetAsp,
+                "competitor_verb": trial.CompVerb,
+                "competitor_aspect": trial.CompAsp,
+                "was": trial.Was,
+            });
+        }
+        
+        /* Sort trials according to "slide" column
+        var compare = function(a, b) {
+          var result = 0;
+          if (a.slide > b.slide) {
+            result = 1;
+          } else if (a.slide < b.slide) {
+            result = -1;
+          }
+          return result;
+        }
+        
+        data_trials.sort(compare); */
+        
+        // Add current trials to 'all_trials' list
+        for (var i = 0; i < data_trials.length; i++) {
+            all_trials.push(data_trials[i]);
+        }
+    }
+            
+    // COUNTERBALANCE BETWEEN 2 LISTS
+    var random_list_index = Math.floor(Math.random() * 2) + 1;
+    console.log("Loading list " + random_list_index);
+
+    $.ajax({
+        type: "GET",
+        url: './stimuli/list_'+ random_list_index +'.csv',
+        dataType: "text",
+        success: function(data) {
+            parseData(data, random_list_index);
+        },
+        async: false
+    });
+    console.log(all_trials);
+
+    // CREATE THE LIST OF IMAGES AND AUDIO TO PRELOAD
+    var images = new Set();
+    for (var i = 0; i < all_trials.length; i++) {
+        images.add(all_trials[i].left);
+        images.add(all_trials[i].right);
+    }
+    var instruction_help_image = "stimuli/img/calibration.png";
+    images.add(instruction_help_image);
+    
+    // Images for the participant setup survey
+    var laptop_image = "stimuli/img/setup_laptop.png";
+    images.add(laptop_image);
+    
+    var mouse_image = "stimuli/img/setup_mouse.png";
+    images.add(mouse_image);
+    
+    var desktop_image = "stimuli/img/setup_desktop.png";
+    images.add(desktop_image);
+    
+    var external_camera_image = "stimuli/img/setup_external_camera.png";
+    images.add(external_camera_image);
+    images = Array.from(images);
+    
+    // Create an array containing all the unique URL's for our required audio.
+    var audio_files = new Set();
+    for (var i = 0; i < all_trials.length; i++) {
+        audio_files.add(all_trials[i].audio + ".mp3");
+        audio_files.add(all_trials[i].audio + ".ogg");
+        audio_files.add(all_trials[i].preamble + ".mp3");
+        audio_files.add(all_trials[i].preamble + ".ogg");
+    }
+    
+    var sound_check = "stimuli/audio/sound_check";
+    audio_files.add(sound_check + ".mp3");
+    audio_files.add(sound_check + ".ogg");
+    audio_files = Array.from(audio_files);
+
+    /* create timeline */
+    var timeline = [];
+
+    /* define welcome message trial */ 
+    var welcome = {
+        type: "html-button-response",
+        stimulus: `<style> ul{text-align:left;} </style>
+                    <p>Welcome to the experiment!</p>
+                    <p style="text-align:left;">Before you get started, please make sure:</p>
+                    <ul>
+                        <li>You are free from distractions for the next 15 minutes;</li>
+                        <li>Your face is brightly and evenly lit (for example, by an overhead light);</li>
+                        <li>You are sitting comfortably. (Please lean against the backrest of your seat, if you have one.)</li></ul>
+                    <p><b>Ready?</b></p>`,
+        choices: ['Continue']            
+    };
+    timeline.push(welcome);
+
+    /* define browser check trial */
+    var browser_check = {
+        type: "browser-check",
+        test_audio: sound_check,
+        no_button_label: "No",
+        yes_button_label: "Yes",
+        ok_button_label: "OK",
+        sound_check_dialog_title: "Sound Check",
+        sound_check_dialog_text: "Can you hear the sound that's being played? You may need to unmute the current tab in your browser, and turn on the volume on your computer.",
+        webcam_check_dialog_title: "Webcam Check",
+        webcam_check_dialog_text: "We are trying to detect your webcam. You may need to give permission from the web browser when prompted.",
+        browser_incompatible_dialog_title: "Incompatible Browser",
+        browser_incompatible_dialog_text: "We are sorry, but your browser is incompatible with this experiment. You may retry from another supported browser (Chrome, Firefox, Edge) on a laptop or desktop computer.",
+        no_webcam_dialog_title: "Webcam Not Detected",
+        no_webcam_dialog_text: "We're sorry, but we could not detect your webcam. You may retry after checking your webcam setup, and making sure to give permission from the browser when prompted."
+    };
+    timeline.push(browser_check);
+
+    var participant_survey = {
+      type: 'survey-html-form',
+      button_label: 'OK',
+      preamble: '<p>Please answer the following questions:</p>',
+      html: `<div class="form-group">
+              <label for="participant_age">Age</label>
+              <input type="text" class="form-control form-control-lg" id="participant_age" name="participant_age" placeholder="How old are you?" required>
+            </div>
+            <div class="form-group">
+              <label for="participant_vision">Vision</label>
+              <select class="form-control form-control-lg" id="participant_vision" name="participant_vision" required>
+                <option disabled selected value> -- Do you have corrected vision? -- </option>
+                <option value="G">Yes: I wear glasses</option>
+                <option value="C">Yes: I wear contact lenses</option>
+                <option value="U">No: I have normal, uncorrected vision</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="participant_gender">Gender</label>
+              <select class="form-control form-control-lg" id="participant_gender" name="participant_gender" required>
+                <option disabled selected value> -- Choose gender -- </option>
+                <option value="F">Female</option>
+                <option value="M">Male</option>
+                <option value="O">Other</option>
+                <option value="X">Prefer not to say</option>
+              </select>
+            </div>`
+    };
+    //timeline.push(participant_survey);
+
+    /* define head positioning trial */
+    timeline.push({
+         type: "head-positioning",
+         continue_button_label: "Continue",
+         instruction_title: "Positioning",
+         instruction_text: "<p>Adjust your camera location (if an external webcam is used) and/or your position so that your face is inside the rectangle.</p>" +
+                           "<p>It may take a few seconds for your webcam feed to appear.</p>",
+     });
+    
+    var setup_survey = {
+      type: 'survey-html-form',
+      button_label: 'OK',
+      dataAsArray: true,
+      preamble: '<p> Please mark the equipment you are using from the list below </p>',
+      html: `<select name="participant_setup" multiple="multiple" class="image-picker show-html">
+              <option data-img-src="`+ laptop_image +`" value="laptop">Laptop</option>
+              <option data-img-src="`+ mouse_image +`" value="mouse">Mouse</option>
+              <option data-img-src="`+ desktop_image +`" value="desktop">Desktop Computer</option>
+              <option data-img-src="`+ external_camera_image +`" value="external_camera">External Camera</option>
+            </select>
+            <style>
+                ul.thumbnails.image_picker_selector {
+                  overflow: auto;
+                  list-style-image: none;
+                  list-style-position: outside;
+                  list-style-type: none;
+                  padding: 0px;
+                  margin: 0px; }
+                  ul.thumbnails.image_picker_selector ul {
+                    overflow: auto;
+                    list-style-image: none;
+                    list-style-position: outside;
+                    list-style-type: none;
+                    padding: 0px;
+                    margin: 0px; }
+                  ul.thumbnails.image_picker_selector li.group_title {
+                    float: none; }
+                  ul.thumbnails.image_picker_selector li {
+                    margin: 0px 12px 12px 0px;
+                    float: left; }
+                    ul.thumbnails.image_picker_selector li .thumbnail {
+                      padding: 6px;
+                      border: 1px solid #DDD;
+                      -webkit-user-select: none;
+                      -moz-user-select: none;
+                      -ms-user-select: none; }
+                      ul.thumbnails.image_picker_selector li .thumbnail img {
+                        -webkit-user-drag: none; }
+                    ul.thumbnails.image_picker_selector li .thumbnail.selected {
+                      background: #08C; }
+            </style>`,
+      javascript: '$("select").imagepicker();'
+    };
+    //timeline.push(setup_survey);
+
+    /* define instructions trial */
+    var instructions = {
+        type: "html-button-response",
+        stimulus: "<p>INSTRUCTIONS</p>" +
+            "<p>This experiment contains a number of trials. In each trial, you will first see a dot in the center of the screen. <br>Click on the dot to proceed. You will hear a sentence.</p>" +
+            "<p>You will then see two pictures, and hear another sentence. Click on the picture that best matches that sentence.<br> <u>Note: while the sentence is playing, your mouse cursor will not be visible.</u> </p>" +
+            "<p>Please try not to move your head too much. You will occasionally be asked to re-calibrate before continuing the experiment.</p>" +
+            "<p><b>Ready?</b></p>",
+        choices: ['Continue'], 
+        post_trial_gap: 500
+    };
+    timeline.push(instructions);
+
+    // enter fullscreen mode
+        timeline.push({
+        type: 'fullscreen',
+        message: "<p>Click the button below to switch to fullscreen mode</p>",
+        button_label: 'Continue',
+        fullscreen_mode: true
+    });
+
+    var initial_calibration = {
+        type: 'webgazer-calibration',
+        instruction_help_image: instruction_help_image,
+        debug_mode: debug_mode,
+        continue_button_label: 'Continue',
+        calibrate_button_label: 'Calibrate',
+        restart_calibration_button_label: 'Recalibrate',
+        leave_experiment_button_label: 'Leave Experiment',
+        calibration_successful_text: 'Calibration successful!',
+        calibration_failed_text: 'Calibration failed! Please try again, without moving your head.',
+        calibration_max_retries_reached_text: 'The calibration was not successful in {} retries. The experiment has finished.',
+
+        instruction_title: "Calibration",
+        instruction_text: "Please click on each of the 9 points on the screen. You must click on each point 5 times till it goes yellow. This will calibrate your eye movements.",
+        instruction_help_calibrate_button_label: "Start Calibration",
+        accuracy_title: "Calculating Calibration Quality",
+        accuracy_text: "Please don't move your mouse & stare at the middle dot for the next 5 seconds. This will allow us to calculate the accuracy of our predictions.",
+        minimum_calibration_accuracy: 70,
+        maximum_tries: 3
+    };
+    //timeline.push(initial_calibration);
+
+    //Enable this line if you're debugging or editing
+    window.is_calibrated = true;
+
+    // Trial for any calibrations needed later on
+    var repeated_calibration = JSON.parse(JSON.stringify(initial_calibration));
+    repeated_calibration.instruction_help_image = null;
+    
+    var recalibration_if_necessary = JSON.parse(JSON.stringify(repeated_calibration));
+    recalibration_if_necessary.skip_if_calibrated = true;
+
+    /* Add all trials */
+    for (var num_trial = 0; num_trial < all_trials.length; num_trial++) {
+        // Add a looping timeline for the ASPECT experiment trial
+        timeline.push({
+            timeline: [recalibration_if_necessary, all_trials[num_trial]],
+            loop_function: function(data){
+                // Repeat while the calibration is lost
+                return !window.is_calibrated;
+            }
+        });
+
+        // Add a repeated calibration every 10 trials
+        if(num_trial % 10 == 9) {
+            timeline.push(repeated_calibration);
+        }
+    }
+    
+    // exit fullscreen mode
+    timeline.push({
+        type: 'fullscreen',
+        fullscreen_mode: false
+    });
+
+
+     // The remaining two changes are located in the jsPsych.init function
+
+    // TRACK MOUSE POSITION
+    if (window.mouse_pos_x == undefined) {
+        window.mouse_pos_x = null;
+        window.mouse_pos_y = null;
+    }
+    $("body").mousemove(function(e) {
+        window.mouse_pos_x = e.pageX;
+        window.mouse_pos_y = e.pageY;
+    });
+
+    /* start the experiment */
+    jatos.onLoad(function() {
+
+        jsPsych.init({
+            //display_element: $('#display-element')[0],
+            timeline: timeline,
+            preload_images: images,
+            preload_audio: audio_files,
+            show_preload_progress_bar: true,
+            on_data_update: function(data) {
+                console.log(data);
+            },
+            on_finish: function() {
+                var resultJson = jsPsych.data.get().json();
+                jatos.submitResultData(resultJson, jatos.startNextComponent);
+                /*Swal.fire({
+                    title: "Experiment Finished",
+                    text: "Thanks for your participation. You may close this page now.",
+                    width: 600,
+                    allowOutsideClick: false,
+                    showCancelButton: false, 
+                    confirmButtonText: "OK",
+                }) */
+            }
+        });
+    });
+
+</script>
+</html> 

@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <script src="/assets/javascripts/jatos.js"></script>
+    <script src="resources/jspsych.js"></script>
+    <script src="resources/jspsych-survey-text.js"></script>
+    <script src="resources/jspsych-html-button-response.js"></script>
+    <script src="resources/jspsych-survey-html-form.js"></script>
+    <link rel="stylesheet" href="resources/jspsych.css"></link>
+  </head>
+  <body></body>
+  <script>
+
+    var pre_if_trial = {
+        type: 'html-button-response',
+        stimulus: "<p>Thank you for taking part in this study!</p>" +
+        "<p>Before you return to Prolific, would you like to answer a few more questions, <br>to help us learn how to build better webcam eye tracking experiments?</p>" +
+        "<p><b>These questions are optional.</b> You can answer as many or few as you like, or you can skip them altogether.</p>",
+        choices: ['No thanks, take me back to Prolific', 'Yes, I\'ll answer some questions']
+    }
+
+    var survey_page = {
+        type: 'survey-text',
+        preamble: 'Great! The following questions relate to the hard- and software you used to do this experiment. <br>Please answer the questions in as much detail as you are able.',
+        questions: [
+        {prompt: 'What browser did you use?', placeholder: 'e.g. Firefox 83.0', columns:50, required: false, name: 'Browser'},
+        {prompt: 'What Operating System did you use?', placeholder: 'e.g. MacOS Mojave, 10.14.6', columns: 50, required: false, name: 'OS'},
+        {prompt: 'What webcam did you use?', placeholder: 'e.g. My macbook\'s inbuilt camera', columns: 50, required: false, name:'Webcam'},
+        {prompt: 'Did notice your computer \'struggling\' during the experiment?', placeholder: 'e.g. Yes, the fan grew loud and the study took a long time to load', rows:10, columns:50, required: false, name: 'Struggle'}
+        ],
+        randomize_question_order: false
+    }
+
+    var if_node = {
+        timeline: [survey_page],
+        conditional_function: function(){
+            // get the data from the previous trial,
+            // and check which key was pressed
+            var data = jsPsych.data.get().last(1).values()[0];
+            if(data.button_pressed == 0){
+                return false;
+            } else {
+                return true;
+            }
+        }
+    }
+
+    var end_page = {
+        type: 'html-button-response',
+        stimulus: 'Thanks again! You will be redirected to Prolific now.',
+        choices: ['OK']
+    }
+
+    jatos.onLoad(function() {
+        jsPsych.init({
+            timeline: [pre_if_trial, if_node, end_page],
+            on_finish: function(){
+                var resultJson = jsPsych.data.get().json();
+                jatos.submitResultData(resultJson, jatos.endStudy);
+            }
+        });
+    }); 
+
+    </script>
+    </html>
