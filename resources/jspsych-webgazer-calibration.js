@@ -368,7 +368,7 @@ button {
                             title: trial_info.calibration_failed_text,
                             confirm: trial_info.restart_calibration_button_label
                         }).then((result) => {
-                            plugin_ref.restartCalibration(false);
+                            plugin_ref.restartCalibration(true);
                             calibration_tries++;
                         });
                     }
