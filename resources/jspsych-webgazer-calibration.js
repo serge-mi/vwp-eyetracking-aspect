@@ -122,6 +122,12 @@ jsPsych.plugins['webgazer-calibration'] = (function() {
                 default: 3,
                 description: 'The maximum number of times the calibration can be repeated. If the subject still cannot achieve the required calibration, the experiment will be terminated.'
             },
+            should_calibrate_only_if_necessary: {
+                type: jsPsych.plugins.parameterType.BOOL,
+                pretty_name: 'Should calibrate only if necessary',
+                default: false,
+                description: 'Will start with validation, and will request recalibration only if accuracy is below threshold. Default is false.'
+            },
         }
     }
 
@@ -235,8 +241,11 @@ button {
 
     // Initialize calibration components
     plugin.initCalibration = function() {
+        calibration_tries = 1;
         plugin_ref.hideCalibrationPoints();
-        if (trial_info.instruction_help_image) {
+        if (trial_info.should_calibrate_only_if_necessary) {
+            plugin_ref.startValidation();
+        } else if (trial_info.instruction_help_image) {
             plugin_ref.dialog({
                 title: trial_info.instruction_title,
                 imageUrl: trial_info.instruction_help_image,
@@ -245,6 +254,7 @@ button {
                 plugin_ref.restartCalibration();
             });
         }
+        
 
         // When a calibration target is clicked
         $(".Calibration").click(function() {
@@ -274,80 +284,7 @@ button {
 
             // Last point is calibrated
             if (points_calibrated >= 9) {
-                //Hide all calibrations except the one in the center
-                plugin_ref.hideCalibrationPoints();
-                $("#Pt5").show();
-
-                // Notification for the measurement process
-                plugin_ref.dialog({
-                    title: trial_info.accuracy_title,
-                    text: trial_info.accuracy_text,
-                    confirm: trial_info.continue_button_label,
-                }).then((result) => {
-                    // Start storing the prediction points in WebGazer for 5 seconds
-                    startStoringPoints();
-
-                    sleep(5000).then(() => {
-                        // Stop storing the prediction points
-                        stopStoringPoints();
-
-                        // Retrieve the stored points and calculate precision
-                        var past50 = webgazer.getStoredPoints();
-                        window.precision_measurement = calculatePrecision(past50);
-                        precision_measurements.push(window.precision_measurement);
-
-                        // For the debug mode, give the option to recalibrate.
-                        if (trial_info.debug_mode) {
-                            plugin_ref.dialog({
-                                title: "Your accuracy measure is " + window.precision_measurement + "%",
-                                confirm: trial_info.continue_button_label,
-                                cancel: trial_info.restart_calibration_button_label
-                            }).then((result) => {
-                                if (result.isConfirmed) {
-                                    //clear the calibration & hide the last middle button
-                                    plugin_ref.hideCalibrationPoints();
-                                    plugin_ref.finishCalibration();
-                                } else {
-                                    plugin_ref.restartCalibration(false);
-                                }
-                            });
-                        }
-                        // Otherwise, compare with the minimum score and recalibrate if necessary
-                        else {
-                            // Precision is high enough
-                            if (window.precision_measurement >= trial_info.minimum_calibration_accuracy) {
-                                plugin_ref.dialog({
-                                    title: trial_info.calibration_successful_text,
-                                    confirm: trial_info.continue_button_label,
-                                }).then((result) => {
-                                    // Clear the calibration & hide the last middle button
-                                    plugin_ref.hideCalibrationPoints();
-                                    plugin_ref.finishCalibration();
-                                });
-                            }
-                            // Precision is not very good, but we can still retry
-                            else if (calibration_tries < trial_info.maximum_tries) {
-                                plugin_ref.dialog({
-                                    title: trial_info.calibration_failed_text,
-                                    confirm: trial_info.restart_calibration_button_label
-                                }).then((result) => {
-                                    plugin_ref.restartCalibration(false);
-                                    calibration_tries++;
-                                });
-                            }
-                            // Precision is not very good, and retry limit exceeded
-                            else {
-                                plugin_ref.dialog({
-                                    title: trial_info.calibration_max_retries_reached_text.replace("{}", trial_info.maximum_tries),
-                                    confirm: trial_info.leave_experiment_button_label,
-                                }).then((result) => {
-                                    jsPsych.endExperiment("Could not calibrate in " + trial_info.maximum_tries + ". Precision measurements for calibrations: " + precision_measurements);
-                                });
-                            }
-
-                        }
-                    });
-                });
+                plugin_ref.startValidation();
             }
         });
 
@@ -368,6 +305,86 @@ button {
             plugin_ref.popUpInstruction();
         }
         plugin_ref.showInitialCalibrationPoints();
+    }
+
+    plugin.startValidation = function() {
+        //Hide all calibrations except the one in the center
+        plugin_ref.hideCalibrationPoints();
+        $("#Pt5").css('background-color', 'yellow');
+        $("#Pt5").prop('disabled', true);
+        $("#Pt5").css('opacity', 1);
+        $("#Pt5").show();
+
+        // Notification for the measurement process
+        plugin_ref.dialog({
+            title: trial_info.accuracy_title,
+            text: trial_info.accuracy_text,
+            confirm: trial_info.continue_button_label,
+        }).then((result) => {
+            // Start storing the prediction points in WebGazer for 5 seconds
+            startStoringPoints();
+
+            sleep(5000).then(() => {
+                // Stop storing the prediction points
+                stopStoringPoints();
+
+                // Retrieve the stored points and calculate precision
+                var past50 = webgazer.getStoredPoints();
+                window.precision_measurement = calculatePrecision(past50);
+                precision_measurements.push(window.precision_measurement);
+
+                // For the debug mode, give the option to recalibrate.
+                if (trial_info.debug_mode) {
+                    plugin_ref.dialog({
+                        title: "Your accuracy measure is " + window.precision_measurement + "%",
+                        confirm: trial_info.continue_button_label,
+                        cancel: trial_info.restart_calibration_button_label
+                    }).then((result) => {
+                        if (result.isConfirmed) {
+                            //clear the calibration & hide the last middle button
+                            plugin_ref.hideCalibrationPoints();
+                            plugin_ref.finishCalibration();
+                        } else {
+                            plugin_ref.restartCalibration(false);
+                        }
+                    });
+                }
+                // Otherwise, compare with the minimum score and recalibrate if necessary
+                else {
+                    // Precision is high enough
+                    if (window.precision_measurement >= trial_info.minimum_calibration_accuracy) {
+                        plugin_ref.dialog({
+                            title: trial_info.calibration_successful_text,
+                            confirm: trial_info.continue_button_label,
+                        }).then((result) => {
+                            // Clear the calibration & hide the last middle button
+                            plugin_ref.hideCalibrationPoints();
+                            plugin_ref.finishCalibration();
+                        });
+                    }
+                    // Precision is not very good, but we can still retry
+                    else if (calibration_tries < trial_info.maximum_tries) {
+                        plugin_ref.dialog({
+                            title: trial_info.calibration_failed_text,
+                            confirm: trial_info.restart_calibration_button_label
+                        }).then((result) => {
+                            plugin_ref.restartCalibration(false);
+                            calibration_tries++;
+                        });
+                    }
+                    // Precision is not very good, and retry limit exceeded
+                    else {
+                        plugin_ref.dialog({
+                            title: trial_info.calibration_max_retries_reached_text.replace("{}", trial_info.maximum_tries),
+                            confirm: trial_info.leave_experiment_button_label,
+                        }).then((result) => {
+                            jsPsych.endExperiment("Could not calibrate in " + trial_info.maximum_tries + ". Precision measurements for calibrations: " + precision_measurements);
+                        });
+                    }
+
+                }
+            });
+        });
     }
 
     plugin.finishCalibration = function() {
