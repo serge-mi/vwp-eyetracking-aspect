@@ -321,12 +321,18 @@ button {
             text: trial_info.accuracy_text,
             confirm: trial_info.continue_button_label,
         }).then((result) => {
+            // Hide cursor
+            document.documentElement.style.cursor = 'none';
+     		document.getElementById('Pt5').style.cursor = 'none';
             // Start storing the prediction points in WebGazer for 5 seconds
             startStoringPoints();
 
             sleep(5000).then(() => {
                 // Stop storing the prediction points
                 stopStoringPoints();
+                // Un-hide cursor
+                document.documentElement.style.cursor = 'auto';
+     			document.getElementById('Pt5').style.cursor = 'auto';
 
                 // Retrieve the stored points and calculate precision
                 var past50 = webgazer.getStoredPoints();
