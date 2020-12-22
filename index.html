@@ -323,10 +323,11 @@
     window.is_calibrated = true;
 
     // Trial for any calibrations needed later on
-    var repeated_calibration = JSON.parse(JSON.stringify(initial_calibration));
-    repeated_calibration.instruction_help_image = null;
+    var revalidation = JSON.parse(JSON.stringify(initial_calibration));
+    revalidation.should_calibrate_only_if_necessary = true;
     
-    var recalibration_if_necessary = JSON.parse(JSON.stringify(repeated_calibration));
+    var recalibration_if_necessary = JSON.parse(JSON.stringify(initial_calibration));
+    recalibration_if_necessary.instruction_help_image = null;
     recalibration_if_necessary.skip_if_calibrated = true;
 
     /* Add all trials */
@@ -342,7 +343,7 @@
 
         // Add a repeated calibration every 10 trials
         if(num_trial % 10 == 9) {
-            timeline.push(repeated_calibration);
+            timeline.push(revalidation);
         }
     }
     
